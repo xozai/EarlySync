@@ -29,14 +29,16 @@ func menuBarDotColor(for state: TrackingState, mappingConfig: ActivityMappingCon
 ///
 /// Not a template image — a template image is masked to a single system color,
 /// which would erase the whole point of a colored dot. Instead the clock glyph
-/// itself is drawn in `NSColor.labelColor`, which resolves to the correct
-/// black/white for light/dark menu bars at draw time; only the dot carries a
-/// fixed, non-adaptive color.
+/// is manually retinted to `NSColor.labelColor` (see `tintedClockGlyph(_:)`),
+/// which resolves to the correct black/white for light/dark menu bars at draw
+/// time; only the dot carries a fixed, non-adaptive color.
 ///
-/// Caveat: rendering correctness (this actually looks right) has not been
-/// visually verified — this environment has no display. The one thing that
-/// *is* verified by an automated test is that this doesn't crash and produces
-/// a non-empty image; a manual look on a real Mac is still worthwhile.
+/// Caveat: no display in this environment, so the result has never been
+/// eyeballed. What *is* verified: an automated test renders under forced
+/// `.aqua`/`.darkAqua` appearances and samples actual pixel RGB via
+/// `NSBitmapImageRep` to confirm the glyph tint really does differ between
+/// light and dark — not just that drawing doesn't crash. A manual look on a
+/// real Mac is still worthwhile.
 enum MenuBarIconRenderer {
     static let size = NSSize(width: 18, height: 18)
 
@@ -46,11 +48,7 @@ enum MenuBarIconRenderer {
         defer { image.unlockFocus() }
 
         if let clock = NSImage(systemSymbolName: "clock", accessibilityDescription: nil) {
-            let tinted = clock.copy() as! NSImage
-            tinted.isTemplate = true
-            NSColor.labelColor.set()
-            let rect = NSRect(origin: .zero, size: size)
-            tinted.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1.0)
+            tintedClockGlyph(clock).draw(in: NSRect(origin: .zero, size: size))
         }
 
         let dotDiameter: CGFloat = 7
@@ -64,6 +62,28 @@ enum MenuBarIconRenderer {
         NSBezierPath(ovalIn: dotRect).fill()
 
         return image
+    }
+
+    /// Manually retints a template image to `NSColor.labelColor`.
+    ///
+    /// `NSColor.set()` followed by `NSImage.draw()` does NOT retint an image —
+    /// `.set()` only affects subsequent *path* drawing (`NSBezierPath.fill()`,
+    /// etc.), and `isTemplate` only auto-tints when an AppKit control renders
+    /// the image, not a manual `lockFocus()`/`draw()` call. (Caught by HoneyX
+    /// in issue #20, verified by pixel-sampling under forced light/dark
+    /// appearances — the untinted version rendered the same dark gray in both.)
+    ///
+    /// The correct technique: draw the template image into a fresh context,
+    /// then fill that context with the target color using `.sourceAtop`,
+    /// which paints only where the glyph already has non-zero alpha.
+    private static func tintedClockGlyph(_ image: NSImage) -> NSImage {
+        let tinted = NSImage(size: image.size)
+        tinted.lockFocus()
+        image.draw(at: .zero, from: .zero, operation: .sourceOver, fraction: 1.0)
+        NSColor.labelColor.set()
+        NSRect(origin: .zero, size: image.size).fill(using: .sourceAtop)
+        tinted.unlockFocus()
+        return tinted
     }
 
     static func nsColor(for dotColor: MenuBarDotColor) -> NSColor {
