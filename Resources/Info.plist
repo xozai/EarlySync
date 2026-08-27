@@ -20,5 +20,19 @@
     <true/>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © EarlySync. All rights reserved.</string>
+    <!--
+      Sparkle auto-update config (issue #8). SUPublicEDKey is intentionally
+      left blank until a real EdDSA keypair exists — Sparkle's
+      `generate_keys` tool produces one, the private half stays out of the
+      repo (CI secret), and the public half goes here. UpdaterService.swift
+      checks for an empty key and disables update-checking entirely rather
+      than let Sparkle assert/crash on a missing one.
+    -->
+    <key>SUFeedURL</key>
+    <string>https://github.com/xozai/EarlySync/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>__SPARKLE_PUBLIC_ED_KEY__</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
 </dict>
 </plist>

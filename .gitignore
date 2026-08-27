@@ -16,7 +16,9 @@ DerivedData/
 
 # Swift Package Manager
 .build/
-*.resolved
+# Package.resolved IS committed (see below) now that we have a real
+# dependency (Sparkle) — pins the exact resolved version for reproducible
+# CI builds instead of silently floating within the `from:` range.
 
 # Packaging output (scripts/package-dmg.sh)
 dist/

@@ -32,28 +32,50 @@ echo "==> Assembling app bundle at $APP_BUNDLE"
 rm -rf "$DIST_DIR"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
+mkdir -p "$APP_BUNDLE/Contents/Frameworks"
 
 cp "$BUILD_DIR/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
+cp -R "$BUILD_DIR/Sparkle.framework" "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
 
+# Default to empty, not the literal placeholder text — UpdaterService.swift
+# treats a non-empty SUPublicEDKey as "a real key is configured" and would
+# try to initialize Sparkle with garbage if the placeholder were left in.
 sed \
   -e "s/__VERSION__/$VERSION/" \
   -e "s/__BUILD__/$BUILD_NUMBER/" \
+  -e "s/__SPARKLE_PUBLIC_ED_KEY__/${SPARKLE_PUBLIC_ED_KEY:-}/" \
   "$ROOT_DIR/Resources/Info.plist" > "$APP_BUNDLE/Contents/Info.plist"
+
+sign() {
+  if [ -n "${CODESIGN_IDENTITY:-}" ]; then
+    codesign --force --options runtime --sign "$CODESIGN_IDENTITY" "$1"
+  else
+    codesign --force --sign - "$1"
+  fi
+}
 
 echo "==> Code signing"
 if [ -n "${CODESIGN_IDENTITY:-}" ]; then
   echo "    using identity: $CODESIGN_IDENTITY"
-  codesign --force --deep --options runtime --sign "$CODESIGN_IDENTITY" "$APP_BUNDLE"
 else
   echo "    CODESIGN_IDENTITY not set — ad-hoc signing (codesign --sign -)."
   echo "    This bundle will NOT pass Gatekeeper on other Macs. Set"
   echo "    CODESIGN_IDENTITY to a 'Developer ID Application: ...' identity"
   echo "    for a real distributable build."
-  codesign --force --deep --sign - "$APP_BUNDLE"
 fi
 
+# Sparkle.framework bundles its own nested helper app and XPC services.
+# --deep on the outer app is unreliable for structures this nested — sign
+# from the innermost component out, per Sparkle's own distribution guidance.
+FRAMEWORK="$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
+sign "$FRAMEWORK/Versions/B/XPCServices/Downloader.xpc"
+sign "$FRAMEWORK/Versions/B/XPCServices/Installer.xpc"
+sign "$FRAMEWORK/Versions/B/Updater.app"
+sign "$FRAMEWORK"
+sign "$APP_BUNDLE"
+
 echo "==> Verifying signature"
-codesign --verify --verbose "$APP_BUNDLE"
+codesign --verify --deep --strict --verbose "$APP_BUNDLE"
 
 echo "==> Creating DMG at $DMG_PATH"
 hdiutil create -volname "$APP_NAME" -srcfolder "$APP_BUNDLE" -ov -format UDZO "$DMG_PATH"

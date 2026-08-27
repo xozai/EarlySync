@@ -2,7 +2,8 @@ name: Release
 
 # Builds, signs, notarizes, and publishes a DMG when a version tag is pushed.
 #
-# Requires these repository secrets to actually sign/notarize (see issue #8):
+# Requires these repository secrets to actually sign/notarize/auto-update
+# (see issue #8):
 #   MACOS_CERTIFICATE          - base64-encoded Developer ID Application .p12
 #   MACOS_CERTIFICATE_PASSWORD - password for the .p12
 #   MACOS_CERTIFICATE_IDENTITY - signing identity, e.g.
@@ -10,9 +11,25 @@ name: Release
 #   APPLE_ID                   - Apple ID used for notarization
 #   APPLE_APP_PASSWORD         - app-specific password for that Apple ID
 #   APPLE_TEAM_ID               - Apple Developer Team ID
+#   SPARKLE_PUBLIC_ED_KEY       - public half of a keypair from Sparkle's
+#                                 `generate_keys` tool; baked into the app's
+#                                 Info.plist (SUPublicEDKey) so it can verify
+#                                 update signatures
+#   SPARKLE_PRIVATE_ED_KEY      - private half of that same keypair; used
+#                                 only in this workflow to sign the appcast,
+#                                 never shipped in the app
 #
 # Without these secrets, scripts/package-dmg.sh still runs (ad-hoc signed,
-# not notarized) — this workflow has not been run against real secrets yet.
+# not notarized), and the appcast step is skipped — the app ships with
+# auto-update disabled (see UpdaterService.swift) rather than a broken one.
+# This workflow has not been run against real secrets yet.
+#
+# The Sparkle SPM package only vends the Sparkle.framework binary for
+# linking — generate_keys/generate_appcast/sign_update aren't part of it.
+# They come from Sparkle's own release distribution (the Sparkle-X.Y.Z.tar.xz
+# asset on its GitHub releases), downloaded directly in the appcast step
+# below — not the Homebrew cask, which is deprecated for failing Gatekeeper
+# and scheduled for removal (issue #24).
 
 on:
   push:
@@ -62,9 +79,35 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
         run: ./scripts/package-dmg.sh
 
-      - name: Upload DMG to GitHub Release
+      - name: Generate signed appcast
+        if: ${{ secrets.SPARKLE_PRIVATE_ED_KEY != '' }}
+        env:
+          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
+        run: |
+          # The Homebrew cask ("brew install --cask sparkle") is deprecated
+          # for failing Gatekeeper and is scheduled for removal — pulling the
+          # CLI tools directly from Sparkle's own GitHub release instead,
+          # pinned to the same version as Package.resolved so both stay in
+          # sync. See issue #24.
+          SPARKLE_TOOLS_VERSION="2.9.6"
+          curl -sL -o "$RUNNER_TEMP/sparkle-tools.tar.xz" \
+            "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_TOOLS_VERSION/Sparkle-$SPARKLE_TOOLS_VERSION.tar.xz"
+          mkdir -p "$RUNNER_TEMP/sparkle-tools"
+          tar -xf "$RUNNER_TEMP/sparkle-tools.tar.xz" -C "$RUNNER_TEMP/sparkle-tools"
+
+          KEY_PATH="$RUNNER_TEMP/sparkle_ed_private_key"
+          echo -n "$SPARKLE_PRIVATE_ED_KEY" > "$KEY_PATH"
+          "$RUNNER_TEMP/sparkle-tools/bin/generate_appcast" \
+            --ed-key-file "$KEY_PATH" \
+            --download-url-prefix "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/" \
+            dist/
+
+      - name: Upload DMG (and appcast, if generated) to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/EarlySync-*.dmg
+          files: |
+            dist/EarlySync-*.dmg
+            dist/appcast.xml
