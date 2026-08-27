@@ -34,6 +34,7 @@ private struct AccountTab: View {
     @State private var isSaving = false
     @State private var saveMessage: String?
     @State private var launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
+    @State private var launchAtLoginError: String?
 
     var body: some View {
         Form {
@@ -79,6 +80,11 @@ private struct AccountTab: View {
 
             Section("General") {
                 Toggle("Launch EarlySync at login", isOn: launchAtLoginBinding)
+                if let err = launchAtLoginError {
+                    Text(err)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
             }
         }
         .formStyle(.grouped)
@@ -106,10 +112,12 @@ private struct AccountTab: View {
                         try SMAppService.mainApp.unregister()
                     }
                     launchAtLoginEnabled = newValue
+                    launchAtLoginError = nil
                 } catch {
                     // Revert the toggle — SMAppService can fail if e.g. the app
                     // isn't in /Applications or the user denies the login-item prompt.
                     launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
+                    launchAtLoginError = error.localizedDescription
                 }
             }
         )
