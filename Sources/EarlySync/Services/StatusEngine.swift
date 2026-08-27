@@ -3,7 +3,7 @@ import Combine
 
 // MARK: - StatusEngine
 
-/// Subscribes to `EarlyPoller.trackingState` and dispatches the matching
+/// Subscribes to a `TrackingStateProvider` and dispatches the matching
 /// `ActivityMapping`'s action to `LuxaforWebhookClient` and `FocusManager`.
 ///
 /// Idle state or an entry with no matching mapping turns the Luxafor light
@@ -32,7 +32,7 @@ public final class StatusEngine: ObservableObject {
     // MARK: - Init
 
     init(
-        poller: EarlyPoller,
+        stateProvider: any TrackingStateProvider,
         luxaforClient: LuxaforColorSetting = LuxaforWebhookClient(),
         focusManager: FocusManager = FocusManager(),
         mappingProvider: @escaping () -> ActivityMappingConfig
@@ -41,11 +41,10 @@ public final class StatusEngine: ObservableObject {
         self.focusManager = focusManager
         self.mappingProvider = mappingProvider
 
-        // dropFirst() skips the replay of the poller's current value on subscription —
-        // StatusEngine should react to state *changes*, not fire an action at construction
-        // time using whatever value the poller happened to hold before polling even starts.
-        cancellable = poller.$trackingState
-            .dropFirst()
+        // `trackingStatePublisher` only ever emits real changes (see the protocol's
+        // doc comment) — StatusEngine can subscribe directly without worrying about
+        // firing an action at construction time off some provider-specific replay.
+        cancellable = stateProvider.trackingStatePublisher
             .removeDuplicates()
             .sink { [weak self] state in
                 self?.enqueue(state)

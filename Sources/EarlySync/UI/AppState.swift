@@ -66,7 +66,7 @@ public final class AppState: ObservableObject {
         self.luxaforClient = LuxaforController(transportProvider: { store.load().transport })
         self.focusManager = FocusManager()
         self.statusEngine = StatusEngine(
-            poller: poller,
+            stateProvider: poller,
             luxaforClient: luxaforClient,
             focusManager: focusManager,
             mappingProvider: { store.load() }
