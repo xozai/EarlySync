@@ -3,7 +3,7 @@ import Combine
 
 // MARK: - StatusEngine
 
-/// Subscribes to `EarlyPoller.trackingState` and dispatches the matching
+/// Subscribes to a `TrackingStateProvider` and dispatches the matching
 /// `ActivityMapping`'s action to `LuxaforWebhookClient` and `FocusManager`.
 ///
 /// Idle state or an entry with no matching mapping turns the Luxafor light
