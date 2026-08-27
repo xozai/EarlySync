@@ -18,6 +18,9 @@ public final class EarlyPoller: ObservableObject {
     @Published public private(set) var lastError: EarlyAPIError?
     @Published public private(set) var isPolling: Bool = false
     @Published public private(set) var lastPollDate: Date?
+    /// How often to poll Early, in seconds. Changing this takes effect on the next tick
+    /// (i.e. up to one previous interval later) rather than restarting the loop.
+    @Published public var pollIntervalSeconds: TimeInterval
 
     // MARK: - Configuration
 
@@ -54,6 +57,7 @@ public final class EarlyPoller: ObservableObject {
     ) {
         self.apiClient = apiClient
         self.config = config
+        self.pollIntervalSeconds = config.pollInterval
     }
 
     // MARK: - Lifecycle
@@ -67,7 +71,7 @@ public final class EarlyPoller: ObservableObject {
             // Poll immediately, then on interval
             await self.poll()
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: UInt64(self.config.pollInterval * 1_000_000_000))
+                try? await Task.sleep(nanoseconds: UInt64(self.pollIntervalSeconds * 1_000_000_000))
                 if !Task.isCancelled {
                     await self.poll()
                 }

@@ -16,6 +16,10 @@ public final class AppState: ObservableObject {
     public let authService: EarlyAuthService
     public let mappingStore: ActivityMappingStore
     public let statusEngine: StatusEngine
+    /// Shared with `StatusEngine` so the Settings UI (test light, Shortcuts wizard)
+    /// reflects the same underlying state rather than a second, independent instance.
+    let luxaforClient: LuxaforWebhookClient
+    let focusManager: FocusManager
 
     // MARK: - Published State
 
@@ -58,13 +62,34 @@ public final class AppState: ObservableObject {
         self.authService = EarlyAuthService(apiClient: apiClient)
         self.mappingStore = .shared
         self.mappingConfig = mappingStore.load()
+        self.luxaforClient = LuxaforWebhookClient()
+        self.focusManager = FocusManager()
         let store = mappingStore
-        self.statusEngine = StatusEngine(poller: poller, mappingProvider: { store.load() })
+        self.statusEngine = StatusEngine(
+            poller: poller,
+            luxaforClient: luxaforClient,
+            focusManager: focusManager,
+            mappingProvider: { store.load() }
+        )
+
+        let savedInterval = UserDefaults.standard.double(forKey: Self.pollIntervalDefaultsKey)
+        if savedInterval > 0 {
+            poller.pollIntervalSeconds = savedInterval
+        }
 
         // Start polling if we already have credentials
         if KeychainService.shared.hasEarlyCredentials() {
             poller.start()
         }
+    }
+
+    // MARK: - Poll Interval
+
+    static let pollIntervalDefaultsKey = "com.earlysync.pollIntervalSeconds"
+
+    public func setPollInterval(_ seconds: TimeInterval) {
+        poller.pollIntervalSeconds = seconds
+        UserDefaults.standard.set(seconds, forKey: Self.pollIntervalDefaultsKey)
     }
 
     // MARK: - Actions
