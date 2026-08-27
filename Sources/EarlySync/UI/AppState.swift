@@ -20,6 +20,7 @@ public final class AppState: ObservableObject {
     /// reflects the same underlying state rather than a second, independent instance.
     let luxaforClient: LuxaforController
     let focusManager: FocusManager
+    public let updaterService: UpdaterService
 
     // MARK: - Published State
 
@@ -54,6 +55,7 @@ public final class AppState: ObservableObject {
         let store = mappingStore
         self.luxaforClient = LuxaforController(transportProvider: { store.load().transport })
         self.focusManager = FocusManager()
+        self.updaterService = UpdaterService()
         self.statusEngine = StatusEngine(
             stateProvider: poller,
             luxaforClient: luxaforClient,

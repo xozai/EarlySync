@@ -68,6 +68,14 @@ struct MenuBarView: View {
 
             Divider()
 
+            if appState.updaterService.canCheckForUpdates {
+                Button("Check for Updates…") {
+                    appState.updaterService.checkForUpdates()
+                }
+                .buttonStyle(.plain)
+                .font(.caption)
+            }
+
             // Actions
             HStack {
                 Button("Preferences") {
