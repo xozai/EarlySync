@@ -18,6 +18,9 @@ DerivedData/
 .build/
 *.resolved
 
+# Packaging output (scripts/package-dmg.sh)
+dist/
+
 # macOS
 .DS_Store
 .AppleDouble
