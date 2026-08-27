@@ -27,21 +27,10 @@ public final class AppState: ObservableObject {
 
     // MARK: - Computed
 
-    /// The menu bar SF Symbol name based on current tracking state
-    public var menuBarIcon: String {
-        switch poller.trackingState {
-        case .idle:
-            return "clock"
-        case .tracking(let entry):
-            let mapping = mappingConfig.match(for: entry)
-            switch mapping?.luxaforColor {
-            case .red:    return "clock.fill"  // active / focused
-            case .blue:   return "phone.fill"  // meeting
-            case .green:  return "leaf.fill"   // break
-            case .yellow: return "envelope.fill" // admin
-            default:      return "clock.badge.checkmark"
-            }
-        }
+    /// Menu bar glyph: a clock with a status dot colored to match the current
+    /// Luxafor color (gray when idle or unmapped). See `MenuBarIcon.swift`.
+    public var menuBarImage: NSImage {
+        MenuBarIconRenderer.image(dotColor: menuBarDotColor(for: poller.trackingState, mappingConfig: mappingConfig))
     }
 
     /// Short status string for menu bar popover
