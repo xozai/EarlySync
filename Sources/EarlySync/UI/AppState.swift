@@ -15,6 +15,7 @@ public final class AppState: ObservableObject {
     public let poller: EarlyPoller
     public let authService: EarlyAuthService
     public let mappingStore: ActivityMappingStore
+    public let statusEngine: StatusEngine
 
     // MARK: - Published State
 
@@ -57,6 +58,8 @@ public final class AppState: ObservableObject {
         self.authService = EarlyAuthService(apiClient: apiClient)
         self.mappingStore = .shared
         self.mappingConfig = mappingStore.load()
+        let store = mappingStore
+        self.statusEngine = StatusEngine(poller: poller, mappingProvider: { store.load() })
 
         // Start polling if we already have credentials
         if KeychainService.shared.hasEarlyCredentials() {

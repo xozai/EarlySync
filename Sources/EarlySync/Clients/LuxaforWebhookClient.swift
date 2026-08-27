@@ -25,10 +25,12 @@ public actor LuxaforWebhookClient {
 
     /// Sets the Luxafor light to the given color.
     /// No-ops (with a log) if `luxaforUserId` isn't configured yet.
-    public func setColor(_ color: LuxaforColor) async {
+    /// - Returns: `true` if the webhook call succeeded (after retry, if needed).
+    @discardableResult
+    public func setColor(_ color: LuxaforColor) async -> Bool {
         guard let userId = KeychainService.shared.luxaforUserId, !userId.isEmpty else {
             log("luxaforUserId not configured — skipping setColor(\(color.rawValue))")
-            return
+            return false
         }
 
         let actionFields: WebhookRequest.ActionFields
@@ -39,26 +41,30 @@ public actor LuxaforWebhookClient {
         }
         let request = WebhookRequest(userId: userId, actionFields: actionFields)
 
-        await sendWithRetry(request)
+        return await sendWithRetry(request)
     }
 
     /// Turns the Luxafor light off.
-    public func off() async {
+    @discardableResult
+    public func off() async -> Bool {
         await setColor(.off)
     }
 
     // MARK: - Private
 
-    private func sendWithRetry(_ body: WebhookRequest) async {
+    private func sendWithRetry(_ body: WebhookRequest) async -> Bool {
         do {
             try await send(body)
+            return true
         } catch {
             log("webhook request failed (\(error.localizedDescription)) — retrying once")
             try? await Task.sleep(nanoseconds: retryDelayNanoseconds)
             do {
                 try await send(body)
+                return true
             } catch {
                 log("webhook request failed after retry: \(error.localizedDescription)")
+                return false
             }
         }
     }

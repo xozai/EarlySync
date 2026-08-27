@@ -123,13 +123,16 @@ public final class FocusManager {
     ///
     /// Runs on a background task and never throws — a failed Shortcuts call
     /// is logged and ignored so the Luxafor light keeps working regardless.
-    public func enableFocus(profile: String? = nil) async {
+    /// - Returns: `true` if the shortcut ran successfully.
+    @discardableResult
+    public func enableFocus(profile: String? = nil) async -> Bool {
         let name = profile.map { "EarlySync: \($0)" } ?? Self.focusOnShortcutName
-        await runShortcut(name)
+        return await runShortcut(name)
     }
 
     /// Deactivates Focus by running "EarlySync: Focus Off".
-    public func disableFocus() async {
+    @discardableResult
+    public func disableFocus() async -> Bool {
         await runShortcut(Self.focusOffShortcutName)
     }
 
@@ -149,11 +152,14 @@ public final class FocusManager {
 
     // MARK: - Private
 
-    private func runShortcut(_ name: String) async {
+    @discardableResult
+    private func runShortcut(_ name: String) async -> Bool {
         do {
             try await runner.run(name, timeout: timeout)
+            return true
         } catch {
             print("[FocusManager] Failed to run shortcut \"\(name)\": \(error) — Luxafor still works")
+            return false
         }
     }
 }
