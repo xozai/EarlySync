@@ -8,6 +8,9 @@ import Foundation
 public struct ActivityMappingConfig: Codable {
 
     public var mappings: [ActivityMapping]
+    /// How to talk to the Luxafor light. Defaults to `.webhook` for configs saved
+    /// before this field existed — see the custom `init(from:)` below.
+    public var transport: LuxaforTransport
 
     /// Default mappings used on first launch
     public static let defaults = ActivityMappingConfig(mappings: [
@@ -49,8 +52,23 @@ public struct ActivityMappingConfig: Codable {
         ),
     ])
 
-    public init(mappings: [ActivityMapping]) {
+    public init(mappings: [ActivityMapping], transport: LuxaforTransport = .webhook) {
         self.mappings = mappings
+        self.transport = transport
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case mappings
+        case transport
+    }
+
+    // Custom decode so configs saved before `transport` existed still load —
+    // the auto-synthesized Decodable would otherwise require the key and fall
+    // back to `.defaults`, silently discarding the user's saved mappings.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.mappings = try container.decode([ActivityMapping].self, forKey: .mappings)
+        self.transport = try container.decodeIfPresent(LuxaforTransport.self, forKey: .transport) ?? .webhook
     }
 
     /// Returns the first matching mapping for the given entry, or nil (= idle state)
@@ -150,6 +168,23 @@ public enum LuxaforColor: String, Codable, CaseIterable {
         case .cyan:    return "🩵"
         case .magenta: return "🟣"
         case .off:     return "⚫"
+        }
+    }
+}
+
+// MARK: - LuxaforTransport
+
+/// How EarlySync talks to the Luxafor light.
+public enum LuxaforTransport: String, Codable, CaseIterable {
+    /// Luxafor's cloud webhook API — needs internet + Luxafor software running.
+    case webhook
+    /// Direct USB/HID control — works offline, falls back to `.webhook` if no device is found.
+    case usb
+
+    public var displayName: String {
+        switch self {
+        case .webhook: return "Webhook (cloud)"
+        case .usb: return "USB / Local"
         }
     }
 }

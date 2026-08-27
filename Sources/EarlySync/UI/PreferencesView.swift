@@ -159,10 +159,26 @@ private struct LuxaforFocusTab: View {
     var body: some View {
         Form {
             Section("Luxafor") {
+                Picker("Transport", selection: transportBinding) {
+                    ForEach(LuxaforTransport.allCases, id: \.self) { transport in
+                        Text(transport.displayName).tag(transport)
+                    }
+                }
+
                 TextField("Luxafor User ID", text: $luxaforUserId)
                     .onChange(of: luxaforUserId) { newValue in
                         KeychainService.shared.luxaforUserId = newValue.isEmpty ? nil : newValue
                     }
+
+                if appState.mappingConfig.transport == .usb {
+                    Text("""
+                    USB mode talks directly to a plugged-in Luxafor device — no \
+                    User ID needed. Falls back to the webhook automatically if \
+                    no device is found.
+                    """)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
 
                 Link("Find your User ID at luxafor.co.uk →",
                      destination: URL(string: "https://luxafor.co.uk/webhook-api/")!)
@@ -171,7 +187,7 @@ private struct LuxaforFocusTab: View {
                 Button(isTestingLight ? "Testing…" : "Test Light") {
                     Task { await testLight() }
                 }
-                .disabled(luxaforUserId.isEmpty || isTestingLight)
+                .disabled(isTestingLight || (appState.mappingConfig.transport == .webhook && luxaforUserId.isEmpty))
             }
 
             Section {
@@ -180,6 +196,16 @@ private struct LuxaforFocusTab: View {
         }
         .formStyle(.grouped)
         .padding()
+    }
+
+    private var transportBinding: Binding<LuxaforTransport> {
+        Binding(
+            get: { appState.mappingConfig.transport },
+            set: { newValue in
+                appState.mappingConfig.transport = newValue
+                appState.saveMapping()
+            }
+        )
     }
 
     private func testLight() async {

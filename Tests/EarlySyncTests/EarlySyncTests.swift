@@ -153,6 +153,28 @@ final class ActivityMappingConfigTests: XCTestCase {
         XCTAssertEqual(decoded.mappings.count, config.mappings.count)
         XCTAssertEqual(decoded.mappings.first?.label, config.mappings.first?.label)
     }
+
+    func testTransport_roundTrips() throws {
+        let config = ActivityMappingConfig(mappings: ActivityMappingConfig.defaults.mappings, transport: .usb)
+        let data = try JSONEncoder().encode(config)
+        let decoded = try JSONDecoder().decode(ActivityMappingConfig.self, from: data)
+
+        XCTAssertEqual(decoded.transport, .usb)
+    }
+
+    /// Regression test: configs saved before `transport` existed must still decode —
+    /// auto-synthesized Decodable would otherwise require the key and throw, and
+    /// ActivityMappingStore.load() silently falls back to `.defaults` on any decode
+    /// failure, discarding the user's saved mappings entirely.
+    func testDecoding_missingTransportKey_defaultsToWebhook() throws {
+        let legacyJSON = """
+        {"mappings": []}
+        """
+        let decoded = try JSONDecoder().decode(ActivityMappingConfig.self, from: Data(legacyJSON.utf8))
+
+        XCTAssertEqual(decoded.transport, .webhook)
+        XCTAssertEqual(decoded.mappings.count, 0)
+    }
 }
 
 // MARK: - LuxaforColor Tests

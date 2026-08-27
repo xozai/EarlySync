@@ -18,7 +18,7 @@ public final class AppState: ObservableObject {
     public let statusEngine: StatusEngine
     /// Shared with `StatusEngine` so the Settings UI (test light, Shortcuts wizard)
     /// reflects the same underlying state rather than a second, independent instance.
-    let luxaforClient: LuxaforWebhookClient
+    let luxaforClient: LuxaforController
     let focusManager: FocusManager
 
     // MARK: - Published State
@@ -62,9 +62,9 @@ public final class AppState: ObservableObject {
         self.authService = EarlyAuthService(apiClient: apiClient)
         self.mappingStore = .shared
         self.mappingConfig = mappingStore.load()
-        self.luxaforClient = LuxaforWebhookClient()
-        self.focusManager = FocusManager()
         let store = mappingStore
+        self.luxaforClient = LuxaforController(transportProvider: { store.load().transport })
+        self.focusManager = FocusManager()
         self.statusEngine = StatusEngine(
             poller: poller,
             luxaforClient: luxaforClient,
