@@ -21,6 +21,9 @@ public final class StatusEngine: ObservableObject {
     private let focusManager: FocusManager
     private let mappingProvider: () -> ActivityMappingConfig
     private var cancellable: AnyCancellable?
+    /// Chains dispatched state handling so a slower older call can't overwrite
+    /// `lastAction` after a faster newer one already ran — see `enqueue(_:)`.
+    private var pendingWork: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -41,9 +44,30 @@ public final class StatusEngine: ObservableObject {
             .dropFirst()
             .removeDuplicates()
             .sink { [weak self] state in
-                guard let self else { return }
-                Task { await self.handle(state) }
+                self?.enqueue(state)
             }
+    }
+
+    // MARK: - Dispatch ordering
+
+    /// Each poller state change used to spawn an independent, unlinked `Task`,
+    /// so a slower call for an older state could finish after — and overwrite
+    /// `lastAction` for — a faster call for a newer state. Chaining onto
+    /// `pendingWork` forces strictly in-order processing: a new state's
+    /// `handle(_:)` never starts until every previously enqueued one has
+    /// finished, so `lastAction` always ends up reflecting the most recent state.
+    func enqueue(_ state: TrackingState) {
+        let previous = pendingWork
+        pendingWork = Task { [weak self] in
+            _ = await previous?.value
+            await self?.handle(state)
+        }
+    }
+
+    /// Awaits the current dispatch chain — test-only hook to observe `lastAction`
+    /// only after all enqueued state handling has completed.
+    func waitForPendingWork() async {
+        await pendingWork?.value
     }
 
     // MARK: - Handling

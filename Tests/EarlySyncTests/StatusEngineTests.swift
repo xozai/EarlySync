@@ -5,10 +5,15 @@ import XCTest
 
 private final class MockShortcutRunner: ShortcutRunning {
     var runHandler: ((String) throws -> Void)?
+    /// Per-shortcut-name artificial delay, to simulate one call resolving slower than another.
+    var delays: [String: TimeInterval] = [:]
     private(set) var runCalls: [String] = []
 
     func run(_ shortcutName: String, timeout: TimeInterval) async throws {
         runCalls.append(shortcutName)
+        if let delay = delays[shortcutName] {
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        }
         try runHandler?(shortcutName)
     }
 
@@ -175,5 +180,46 @@ final class StatusEngineTests: XCTestCase {
         await engine.handle(.tracking(entry: entry))
 
         XCTAssertEqual(engine.lastAction?.success, false)
+    }
+
+    // MARK: - Ordering under rapid state changes
+
+    /// Regression test for the race HoneyX found in PR #11: dispatching each state
+    /// change as an independent, unlinked Task meant a slower call for an OLDER
+    /// state could finish after a faster call for a NEWER one and clobber
+    /// `lastAction` with stale data. `enqueue` now chains dispatches so they
+    /// always complete in the order they arrived, regardless of relative speed.
+    func testEnqueue_rapidStateChanges_lastActionReflectsMostRecentState() async {
+        MockURLProtocol.setStubQueue([
+            .init(statusCode: 200, error: nil),
+            .init(statusCode: 200, error: nil),
+        ])
+        // The OLDER state's Focus call resolves slower than the newer one's.
+        shortcutRunner.delays["EarlySync: A"] = 0.5
+
+        let mappingA = ActivityMapping(
+            activityNameContains: ["a work"],
+            luxaforColor: .red,
+            focusProfileName: "A",
+            enableFocus: true,
+            label: "A"
+        )
+        let mappingB = ActivityMapping(
+            activityNameContains: ["b work"],
+            luxaforColor: .blue,
+            focusProfileName: "B",
+            enableFocus: true,
+            label: "B"
+        )
+        let engine = makeEngine(mappings: [mappingA, mappingB])
+
+        engine.enqueue(.tracking(entry: makeEntry(activityName: "A work")))
+        engine.enqueue(.tracking(entry: makeEntry(activityName: "B work")))
+
+        await engine.waitForPendingWork()
+
+        XCTAssertEqual(engine.lastAction?.activityName, "B work")
+        XCTAssertEqual(engine.lastAction?.luxaforColor, .blue)
+        XCTAssertEqual(engine.lastAction?.focusProfile, "B")
     }
 }
