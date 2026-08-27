@@ -8,9 +8,11 @@ struct EarlySyncApp: App {
 
     var body: some Scene {
         // Menu bar app — no main window, no Dock icon (set LSUIElement=YES in Info.plist)
-        MenuBarExtra("EarlySync", systemImage: appState.menuBarIcon) {
+        MenuBarExtra {
             MenuBarView()
                 .environmentObject(appState)
+        } label: {
+            Image(nsImage: appState.menuBarImage)
         }
         .menuBarExtraStyle(.window)
 
