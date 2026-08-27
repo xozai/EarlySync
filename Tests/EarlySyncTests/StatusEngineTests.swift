@@ -222,4 +222,29 @@ final class StatusEngineTests: XCTestCase {
         XCTAssertEqual(engine.lastAction?.luxaforColor, .blue)
         XCTAssertEqual(engine.lastAction?.focusProfile, "B")
     }
+
+    // MARK: - History
+
+    func testHistory_capsAtHistoryLimit_newestFirst() async {
+        let callCount = StatusEngine.historyLimit + 3
+        MockURLProtocol.setStubQueue(Array(repeating: .init(statusCode: 200, error: nil), count: callCount))
+        // Empty keyword list matches any activity name.
+        let mapping = ActivityMapping(
+            activityNameContains: [],
+            luxaforColor: .red,
+            focusProfileName: nil,
+            enableFocus: false,
+            label: "Any"
+        )
+        let engine = makeEngine(mappings: [mapping])
+
+        for i in 0..<callCount {
+            await engine.handle(.tracking(entry: makeEntry(activityName: "Activity \(i)")))
+        }
+
+        XCTAssertEqual(engine.history.count, StatusEngine.historyLimit)
+        // Newest first, oldest entries evicted.
+        XCTAssertEqual(engine.history.first?.activityName, "Activity \(callCount - 1)")
+        XCTAssertEqual(engine.history.last?.activityName, "Activity 3")
+    }
 }

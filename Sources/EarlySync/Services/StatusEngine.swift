@@ -14,6 +14,10 @@ public final class StatusEngine: ObservableObject {
     // MARK: - Published State
 
     @Published public private(set) var lastAction: StatusAction?
+    /// Most recent actions, newest first, capped at `historyLimit`.
+    @Published public private(set) var history: [StatusAction] = []
+
+    public static let historyLimit = 10
 
     // MARK: - Dependencies
 
@@ -75,11 +79,11 @@ public final class StatusEngine: ObservableObject {
     func handle(_ state: TrackingState) async {
         switch state {
         case .idle:
-            lastAction = await turnOff(activityName: nil)
+            record(await turnOff(activityName: nil))
 
         case .tracking(let entry):
             guard let mapping = mappingProvider().match(for: entry) else {
-                lastAction = await turnOff(activityName: entry.activityName)
+                record(await turnOff(activityName: entry.activityName))
                 return
             }
 
@@ -89,13 +93,13 @@ public final class StatusEngine: ObservableObject {
                 ? await focusManager.enableFocus(profile: mapping.focusProfileName)
                 : await focusManager.disableFocus()
 
-            lastAction = StatusAction(
+            record(StatusAction(
                 timestamp: Date(),
                 activityName: entry.activityName,
                 luxaforColor: mapping.luxaforColor,
                 focusProfile: focusProfile,
                 success: luxaforSuccess && focusSuccess
-            )
+            ))
         }
     }
 
@@ -111,5 +115,13 @@ public final class StatusEngine: ObservableObject {
             focusProfile: nil,
             success: luxaforSuccess && focusSuccess
         )
+    }
+
+    private func record(_ action: StatusAction) {
+        lastAction = action
+        history.insert(action, at: 0)
+        if history.count > Self.historyLimit {
+            history.removeLast(history.count - Self.historyLimit)
+        }
     }
 }
