@@ -26,8 +26,10 @@ name: Release
 #
 # The Sparkle SPM package only vends the Sparkle.framework binary for
 # linking — generate_keys/generate_appcast/sign_update aren't part of it.
-# They come from Sparkle's own release distribution, installed here via
-# Homebrew.
+# They come from Sparkle's own release distribution (the Sparkle-X.Y.Z.tar.xz
+# asset on its GitHub releases), downloaded directly in the appcast step
+# below — not the Homebrew cask, which is deprecated for failing Gatekeeper
+# and scheduled for removal (issue #24).
 
 on:
   push:
@@ -85,10 +87,20 @@ jobs:
         env:
           SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
         run: |
-          brew install --cask sparkle
+          # The Homebrew cask ("brew install --cask sparkle") is deprecated
+          # for failing Gatekeeper and is scheduled for removal — pulling the
+          # CLI tools directly from Sparkle's own GitHub release instead,
+          # pinned to the same version as Package.resolved so both stay in
+          # sync. See issue #24.
+          SPARKLE_TOOLS_VERSION="2.9.6"
+          curl -sL -o "$RUNNER_TEMP/sparkle-tools.tar.xz" \
+            "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_TOOLS_VERSION/Sparkle-$SPARKLE_TOOLS_VERSION.tar.xz"
+          mkdir -p "$RUNNER_TEMP/sparkle-tools"
+          tar -xf "$RUNNER_TEMP/sparkle-tools.tar.xz" -C "$RUNNER_TEMP/sparkle-tools"
+
           KEY_PATH="$RUNNER_TEMP/sparkle_ed_private_key"
           echo -n "$SPARKLE_PRIVATE_ED_KEY" > "$KEY_PATH"
-          "$(brew --prefix)/Caskroom/sparkle"/*/bin/generate_appcast \
+          "$RUNNER_TEMP/sparkle-tools/bin/generate_appcast" \
             --ed-key-file "$KEY_PATH" \
             --download-url-prefix "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/" \
             dist/
