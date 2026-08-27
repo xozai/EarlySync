@@ -53,7 +53,7 @@ final class StatusEngineTests: XCTestCase {
     private func makeEngine(mappings: [ActivityMapping]) -> StatusEngine {
         let config = ActivityMappingConfig(mappings: mappings)
         return StatusEngine(
-            poller: poller,
+            stateProvider: poller,
             luxaforClient: luxaforClient,
             focusManager: focusManager,
             mappingProvider: { config }
