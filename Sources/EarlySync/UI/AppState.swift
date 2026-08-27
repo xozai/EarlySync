@@ -105,4 +105,11 @@ public final class AppState: ObservableObject {
     public func saveMapping() {
         mappingStore.save(mappingConfig)
     }
+
+    /// Persists a transport change without touching (or clobbering) any
+    /// unsaved draft edits to `mappingConfig.mappings` — see issue #17.
+    public func setTransport(_ transport: LuxaforTransport) {
+        mappingConfig.transport = transport
+        mappingStore.updateTransport(transport)
+    }
 }

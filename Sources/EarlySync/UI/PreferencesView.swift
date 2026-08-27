@@ -201,10 +201,7 @@ private struct LuxaforFocusTab: View {
     private var transportBinding: Binding<LuxaforTransport> {
         Binding(
             get: { appState.mappingConfig.transport },
-            set: { newValue in
-                appState.mappingConfig.transport = newValue
-                appState.saveMapping()
-            }
+            set: { newValue in appState.setTransport(newValue) }
         )
     }
 

@@ -196,17 +196,23 @@ public final class ActivityMappingStore {
 
     public static let shared = ActivityMappingStore()
 
-    private let fileURL: URL = {
+    private let fileURL: URL
+
+    private convenience init() {
         let appSupport = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first!
         let dir = appSupport.appendingPathComponent("EarlySync", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("activity-mappings.json")
-    }()
+        self.init(fileURL: dir.appendingPathComponent("activity-mappings.json"))
+    }
 
-    private init() {}
+    /// Test-only hook so tests can point at a throwaway file instead of the
+    /// real one in Application Support.
+    init(fileURL: URL) {
+        self.fileURL = fileURL
+    }
 
     public func load() -> ActivityMappingConfig {
         guard let data = try? Data(contentsOf: fileURL),
@@ -215,6 +221,16 @@ public final class ActivityMappingStore {
             return .defaults
         }
         return config
+    }
+
+    /// Updates only `transport` in the persisted config, leaving any other
+    /// fields on disk untouched — so a transport change made from one tab
+    /// never clobbers unsaved, in-progress edits held elsewhere (e.g. the
+    /// Activity Mapping tab's draft rows). See issue #17.
+    public func updateTransport(_ transport: LuxaforTransport) {
+        var onDisk = load()
+        onDisk.transport = transport
+        save(onDisk)
     }
 
     public func save(_ config: ActivityMappingConfig) {
