@@ -13,26 +13,44 @@ final class MockURLProtocol: URLProtocol {
     }
 
     /// FIFO queue of responses to hand out, one per request.
-    static var stubQueue: [Stub] = []
+    private static var stubQueue: [Stub] = []
     /// Every request the client made, in order, for assertion.
-    static var recordedRequests: [URLRequest] = []
+    private static var recordedRequests: [URLRequest] = []
+    /// URLProtocol callbacks can land on different threads for concurrent requests.
+    private static let stateLock = NSLock()
 
     static func reset() {
+        stateLock.lock()
         stubQueue = []
         recordedRequests = []
+        stateLock.unlock()
+    }
+
+    static func setStubQueue(_ stubs: [Stub]) {
+        stateLock.lock()
+        stubQueue = stubs
+        stateLock.unlock()
+    }
+
+    static func allRecordedRequests() -> [URLRequest] {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return recordedRequests
     }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
+        MockURLProtocol.stateLock.lock()
         MockURLProtocol.recordedRequests.append(request)
+        let stub = MockURLProtocol.stubQueue.isEmpty ? nil : MockURLProtocol.stubQueue.removeFirst()
+        MockURLProtocol.stateLock.unlock()
 
-        guard !MockURLProtocol.stubQueue.isEmpty else {
+        guard let stub else {
             client?.urlProtocol(self, didFailWithError: URLError(.unknown))
             return
         }
-        let stub = MockURLProtocol.stubQueue.removeFirst()
 
         if let error = stub.error {
             client?.urlProtocol(self, didFailWithError: error)
@@ -78,12 +96,12 @@ final class LuxaforWebhookClientTests: XCTestCase {
     // MARK: - Success
 
     func testSetColor_success_sendsExpectedPayload() async throws {
-        MockURLProtocol.stubQueue = [.init(statusCode: 200, error: nil)]
+        MockURLProtocol.setStubQueue([.init(statusCode: 200, error: nil)])
 
         await client.setColor(.red)
 
-        XCTAssertEqual(MockURLProtocol.recordedRequests.count, 1)
-        let request = try XCTUnwrap(MockURLProtocol.recordedRequests.first)
+        XCTAssertEqual(MockURLProtocol.allRecordedRequests().count, 1)
+        let request = try XCTUnwrap(MockURLProtocol.allRecordedRequests().first)
         XCTAssertEqual(request.url?.absoluteString, "https://api.luxafor.co.uk/webhook/v1/actions/solid_color")
         XCTAssertEqual(request.httpMethod, "POST")
 
@@ -96,11 +114,11 @@ final class LuxaforWebhookClientTests: XCTestCase {
     }
 
     func testOff_sendsCustomColorPayload() async throws {
-        MockURLProtocol.stubQueue = [.init(statusCode: 200, error: nil)]
+        MockURLProtocol.setStubQueue([.init(statusCode: 200, error: nil)])
 
         await client.off()
 
-        let request = try XCTUnwrap(MockURLProtocol.recordedRequests.first)
+        let request = try XCTUnwrap(MockURLProtocol.allRecordedRequests().first)
         let body = try XCTUnwrap(request.httpBodyOrStreamData())
         let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
         let actionFields = try XCTUnwrap(json["actionFields"] as? [String: Any])
@@ -111,26 +129,26 @@ final class LuxaforWebhookClientTests: XCTestCase {
     // MARK: - Retry on failure
 
     func testSetColor_retriesOnceOnFailure_thenSucceeds() async {
-        MockURLProtocol.stubQueue = [
+        MockURLProtocol.setStubQueue([
             .init(statusCode: 500, error: nil),
             .init(statusCode: 200, error: nil),
-        ]
+        ])
 
         await client.setColor(.blue)
 
-        XCTAssertEqual(MockURLProtocol.recordedRequests.count, 2)
+        XCTAssertEqual(MockURLProtocol.allRecordedRequests().count, 2)
     }
 
     func testSetColor_givesUpAfterOneRetry() async {
-        MockURLProtocol.stubQueue = [
+        MockURLProtocol.setStubQueue([
             .init(statusCode: 500, error: nil),
             .init(statusCode: 500, error: nil),
-        ]
+        ])
 
         await client.setColor(.green)
 
         // Initial attempt + exactly one retry, no more.
-        XCTAssertEqual(MockURLProtocol.recordedRequests.count, 2)
+        XCTAssertEqual(MockURLProtocol.allRecordedRequests().count, 2)
     }
 
     // MARK: - Missing userId
@@ -140,7 +158,24 @@ final class LuxaforWebhookClientTests: XCTestCase {
 
         await client.setColor(.red)
 
-        XCTAssertTrue(MockURLProtocol.recordedRequests.isEmpty)
+        XCTAssertTrue(MockURLProtocol.allRecordedRequests().isEmpty)
+    }
+
+    // MARK: - Concurrency
+
+    /// Actor isolation should serialize concurrent calls safely: every call gets its
+    /// own request/response round trip, none are dropped or corrupted by the others.
+    func testSetColor_concurrentCalls_allRequestsRecordedSafely() async {
+        let colors: [LuxaforColor] = [.red, .green, .blue, .yellow]
+        MockURLProtocol.setStubQueue(colors.map { _ in .init(statusCode: 200, error: nil) })
+
+        await withTaskGroup(of: Void.self) { group in
+            for color in colors {
+                group.addTask { await self.client.setColor(color) }
+            }
+        }
+
+        XCTAssertEqual(MockURLProtocol.allRecordedRequests().count, colors.count)
     }
 }
 
