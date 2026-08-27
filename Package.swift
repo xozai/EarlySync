@@ -12,7 +12,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "EarlySync",
-            path: "Sources/EarlySync"
+            path: "Sources/EarlySync",
+            linkerSettings: [
+                .linkedFramework("IOKit"),
+            ]
         ),
         .testTarget(
             name: "EarlySyncTests",

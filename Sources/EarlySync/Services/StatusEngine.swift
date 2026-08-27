@@ -21,7 +21,7 @@ public final class StatusEngine: ObservableObject {
 
     // MARK: - Dependencies
 
-    private let luxaforClient: LuxaforWebhookClient
+    private let luxaforClient: LuxaforColorSetting
     private let focusManager: FocusManager
     private let mappingProvider: () -> ActivityMappingConfig
     private var cancellable: AnyCancellable?
@@ -33,7 +33,7 @@ public final class StatusEngine: ObservableObject {
 
     init(
         poller: EarlyPoller,
-        luxaforClient: LuxaforWebhookClient = LuxaforWebhookClient(),
+        luxaforClient: LuxaforColorSetting = LuxaforWebhookClient(),
         focusManager: FocusManager = FocusManager(),
         mappingProvider: @escaping () -> ActivityMappingConfig
     ) {
